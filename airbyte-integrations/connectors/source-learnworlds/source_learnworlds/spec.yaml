@@ -1,0 +1,41 @@
+documentationUrl: https://docsurl.com
+connectionSpecification:
+  $schema: http://json-schema.org/draft-07/schema#
+  title: Learnworlds Spec
+  type: object
+  required:
+    - api_url
+    - client_id
+    - client_secret
+  properties:
+    api_url:
+      type: string
+      title: API URL
+      description: >-
+        API url used to connect to your school. 
+        Find yours at <your LearnWorlds URL>/author/settings_api. 
+        You will have to login with your admin credentials. 
+      pattern: ^https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)$
+      examples:
+        - https://api.eu-w3.learnworlds.com/
+    client_id:
+      type: string
+      title: Client ID
+      description: >-
+        Client ID used to connect to your school. 
+        Find yours at <your LearnWorlds URL>/author/settings_api. 
+        You will have to login with your admin credentials. 
+      pattern: ^[0-9a-fA-F]+$
+      examples:
+        - 66ff88ee33338866cc0fb472
+    client_secret:
+      type: string
+      title: Client Secret
+      description: >-
+        Client secret used to connect to your school. 
+        Find yours at <your LearnWorlds URL>/author/settings_api. 
+        You will have to login with your admin credentials. 
+      airbyte_secret: true
+      pattern: ^[0-9a-zA-Z]+$
+      examples:
+        - https://api.eu-w3.learnworlds.com/

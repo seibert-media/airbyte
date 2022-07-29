@@ -2,6 +2,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: airbyte-webapp-svc
+  annotations:
+    cloud.google.com/backend-config: '{"default": "airbyte-iap-enabled"}'
 spec:
   type: NodePort
   ports:
