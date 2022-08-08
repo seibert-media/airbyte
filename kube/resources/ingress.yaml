@@ -19,7 +19,7 @@ metadata:
   name: airbyte-iap-enabled
 spec:
   iap:
-    enabled: false
+    enabled: true
     oauthclientCredentials:
       secretName: airbyte-iap-secret
 ---
