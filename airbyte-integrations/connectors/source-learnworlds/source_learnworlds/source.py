@@ -186,7 +186,7 @@ class Employees(IncrementalLearnworldsStream):
 class SourceLearnworlds(AbstractSource):
     def check_connection(self, logger, config) -> Tuple[bool, any]:
         """
-        TODO: Implement a connection check to validate that the user-provided config can be used to connect to the underlying API
+        Checks connection to LearnWorlds as configured by user. 
 
         See https://github.com/airbytehq/airbyte/blob/master/airbyte-integrations/connectors/source-stripe/source_stripe/source.py#L232
         for an example.
@@ -207,9 +207,9 @@ class SourceLearnworlds(AbstractSource):
                 "grant_type": "client_credentials"
             })
         )
-        json = response.json()
-        if not json.success:
-            result = f"Error(s): {', '.join(json.errors)}"
+        json_response = response.json()
+        if 'success' not in json_response:
+            result = f"Error(s): {', '.join(json_response.errors)}"
             logger.info(f"LearnWorlds connection failed: {result}")
             return False, result
         else:
