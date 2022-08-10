@@ -8,6 +8,14 @@ tasks:
 image:
   file: .gitpod.Dockerfile
 
+ports:
+  - port: 8000 # Airbyte dev server web frontend
+    onOpen: open-browser
+  - port: 8001 # Airbyte internal API host
+    onOpen: ignore
+  - port: 7233 # Airbyte temporal orchestration host
+    onOpen: ignore
+
 vscode:
   extensions:
     - github.vscode-pull-request-github
