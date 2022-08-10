@@ -1,0 +1,15 @@
+tasks:
+  - name: Dev Server
+    init: |
+      docker compose build
+      docker compose create
+    command: docker compose up
+
+image:
+  file: .gitpod.Dockerfile
+
+vscode:
+  extensions:
+    - github.vscode-pull-request-github
+    - ms-azuretools.vscode-docker
+    - ms-python.python
