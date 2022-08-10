@@ -4,20 +4,18 @@ connectionSpecification:
   title: Learnworlds Spec
   type: object
   required:
-    - api_url
+    - school_url
     - client_id
-    - client_secret
+    - access_token
   properties:
-    api_url:
+    school_url:
       type: string
-      title: API URL
+      title: School URL
       description: >-
-        API url used to connect to your school. 
-        Find yours at <your LearnWorlds URL>/author/settings_api. 
-        You will have to login with your admin credentials. 
+        School url used to connect to your LearnWorlds school. 
       pattern: ^https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)$
       examples:
-        - https://api.eu-w3.learnworlds.com/
+        - https://lernen.seibert-media.net
     client_id:
       type: string
       title: Client ID
@@ -27,15 +25,12 @@ connectionSpecification:
         You will have to login with your admin credentials. 
       pattern: ^[0-9a-fA-F]+$
       examples:
-        - 66ff88ee33338866cc0fb472
-    client_secret:
+        - 368cf7126a892cf35986f35c
+    access_token:
       type: string
-      title: Client Secret
-      description: >-
-        Client secret used to connect to your school. 
-        Find yours at <your LearnWorlds URL>/author/settings_api. 
-        You will have to login with your admin credentials. 
+      title: Access Token
+      description: Generate an access token as described in <a href="https://learnworlds.dev/docs/api/b6b6c2d4906e9-authentication#client-credentials-grant">LearnWorld's documentation</a>.
       airbyte_secret: true
       pattern: ^[0-9a-zA-Z]+$
       examples:
-        - https://api.eu-w3.learnworlds.com/
+        - n7T03BnbM6OrtXmYlHJNrCEKqPhPT4JfbWZ6WHLz
