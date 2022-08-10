@@ -93,24 +93,6 @@ class LearnworldsStream(HttpStream, ABC):
         yield {}
 
 
-class Customers(LearnworldsStream):
-    """
-    TODO: Change class name to match the table/data source this stream corresponds to.
-    """
-
-    # TODO: Fill in the primary key. Required. This is usually a unique field in the stream, like an ID or a timestamp.
-    primary_key = "customer_id"
-
-    def path(
-        self, stream_state: Mapping[str, Any] = None, stream_slice: Mapping[str, Any] = None, next_page_token: Mapping[str, Any] = None
-    ) -> str:
-        """
-        TODO: Override this method to define the path this stream corresponds to. E.g. if the url is https://example-api.com/v1/customers then this
-        should return "customers". Required.
-        """
-        return "customers"
-
-
 # Basic incremental stream
 class IncrementalLearnworldsStream(LearnworldsStream, ABC):
     """
@@ -140,49 +122,40 @@ class IncrementalLearnworldsStream(LearnworldsStream, ABC):
         return {}
 
 
-class Employees(IncrementalLearnworldsStream):
-    """
-    TODO: Change class name to match the table/data source this stream corresponds to.
-    """
+class Users(HttpStream):
 
-    # TODO: Fill in the cursor_field. Required.
-    cursor_field = "start_date"
+    primary_key = None
 
-    # TODO: Fill in the primary key. Required. This is usually a unique field in the stream, like an ID or a timestamp.
-    primary_key = "employee_id"
+    url_base = None
+
+    def __init__(self, api_url: str, client_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self.url_base = api_url
+        self.client_id = client_id
 
     def path(self, **kwargs) -> str:
-        """
-        TODO: Override this method to define the path this stream corresponds to. E.g. if the url is https://example-api.com/v1/employees then this should
-        return "single". Required.
-        """
-        return "employees"
+        return "/v2/users"
 
-    def stream_slices(self, stream_state: Mapping[str, Any] = None, **kwargs) -> Iterable[Optional[Mapping[str, any]]]:
-        """
-        TODO: Optionally override this method to define this stream's slices. If slicing is not needed, delete this method.
+    def request_headers(self, stream_state: Mapping[str, Any], stream_slice: Mapping[str, Any] = None, next_page_token: Mapping[str, Any] = None) -> Mapping[str, Any]:
+        return {"Lw-Client": self.client_id}
 
-        Slices control when state is saved. Specifically, state is saved after a slice has been fully read.
-        This is useful if the API offers reads by groups or filters, and can be paired with the state object to make reads efficient. See the "concepts"
-        section of the docs for more information.
+    def parse_response(
+            self,
+            response: requests.Response,
+            stream_state: Mapping[str, Any],
+            stream_slice: Mapping[str, Any] = None,
+            next_page_token: Mapping[str, Any] = None,
+    ) -> Iterable[Mapping]:
+        throw(response.json())
+        return [response.json().data]
 
-        The function is called before reading any records in a stream. It returns an Iterable of dicts, each containing the
-        necessary data to craft a request for a slice. The stream state is usually referenced to determine what slices need to be created.
-        This means that data in a slice is usually closely related to a stream's cursor_field and stream_state.
-
-        An HTTP request is made for each returned slice. The same slice can be accessed in the path, request_params and request_header functions to help
-        craft that specific request.
-
-        For example, if https://example-api.com/v1/employees offers a date query params that returns data for that particular day, one way to implement
-        this would be to consult the stream state object for the last synced date, then return a slice containing each date from the last synced date
-        till now. The request_params function would then grab the date from the stream_slice and make it part of the request by injecting it into
-        the date query param.
-        """
-        raise NotImplementedError(
-            "Implement stream slices or delete this method!")
+    def next_page_token(self, response: requests.Response) -> Optional[Mapping[str, Any]]:
+        current_page = response.json().meta.page
+        if response.json().meta.totalPages == current_page:
+            return None
+        return current_page + 1
 
 
-# Source
 class SourceLearnworlds(AbstractSource):
     def check_connection(self, logger, config) -> Tuple[bool, any]:
         """
@@ -217,12 +190,4 @@ class SourceLearnworlds(AbstractSource):
             return True, None
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
-        """
-        TODO: Replace the streams below with your own streams.
-
-        :param config: A Mapping of the user input configuration as defined in the connector spec.
-        """
-        # TODO remove the authenticator if not required.
-        # Oauth2Authenticator is also available if you need oauth support
-        auth = TokenAuthenticator(token="api_key")
-        return [Customers(authenticator=auth), Employees(authenticator=auth)]
+        return [Users(authenticator=TokenAuthenticator(config["client_secret"]), api_url=config["api_url"], client_id=config["client_id"])]
