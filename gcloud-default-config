@@ -1,6 +1,6 @@
 [core]
-project = airbyte-dev
+project = airbyte-dev-358113
 
 [compute]
-zone = europe-west3-a
+zone = europe-west3-c
 region = europe-west3

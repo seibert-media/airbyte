@@ -9,7 +9,7 @@ RUN sudo chown gitpod: /opt \
     && mkdir $GCS_DIR \
     && curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-361.0.0-linux-x86_64.tar.gz \
     | tar -xzvC /opt \
-    && /opt/google-cloud-sdk/install.sh --quiet --usage-reporting=true --bash-completion=true
+    && /opt/google-cloud-sdk/install.sh --quiet --usage-reporting=true --bash-completion=true --additional-components kubectl
 
 # Install tools for gsutil
 RUN sudo install-packages \
