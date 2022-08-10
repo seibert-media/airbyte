@@ -24,11 +24,13 @@ from airbyte_cdk.models import (
     TraceType,
     Type,
 )
+from deepdiff import DeepDiff
 from docker.errors import ContainerError
 from jsonschema._utils import flatten
 from source_acceptance_test.base import BaseTest
-from source_acceptance_test.config import BasicReadTestConfig, ConnectionTestConfig
+from source_acceptance_test.config import BasicReadTestConfig, ConnectionTestConfig, SpecTestConfig
 from source_acceptance_test.utils import ConnectorRunner, SecretDict, filter_output, make_hashable, verify_records_schema
+from source_acceptance_test.utils.backward_compatibility import SpecDiffChecker, validate_previous_configs
 from source_acceptance_test.utils.common import find_all_values_for_key_in_schema, find_keyword_schema
 from source_acceptance_test.utils.json_schema_helper import JsonSchemaHelper, get_expected_schema_structure, get_object_structure
 
@@ -38,21 +40,32 @@ def connector_spec_dict_fixture(actual_connector_spec):
     return json.loads(actual_connector_spec.json())
 
 
-@pytest.fixture(name="actual_connector_spec")
-def actual_connector_spec_fixture(request: BaseTest, docker_runner):
-    if not request.instance.spec_cache:
-        output = docker_runner.call_spec()
-        spec_messages = filter_output(output, Type.SPEC)
-        assert len(spec_messages) == 1, "Spec message should be emitted exactly once"
-        spec = spec_messages[0].spec
-        request.spec_cache = spec
-    return request.spec_cache
-
-
 @pytest.mark.default_timeout(10)
 class TestSpec(BaseTest):
 
     spec_cache: ConnectorSpecification = None
+    previous_spec_cache: ConnectorSpecification = None
+
+    @staticmethod
+    def compute_spec_diff(actual_connector_spec: ConnectorSpecification, previous_connector_spec: ConnectorSpecification):
+        return DeepDiff(
+            previous_connector_spec.dict()["connectionSpecification"],
+            actual_connector_spec.dict()["connectionSpecification"],
+            view="tree",
+            ignore_order=True,
+        )
+
+    @pytest.fixture(name="skip_backward_compatibility_tests")
+    def skip_backward_compatibility_tests_fixture(self, inputs: SpecTestConfig, previous_connector_docker_runner: ConnectorRunner) -> bool:
+        if previous_connector_docker_runner is None:
+            pytest.skip("The previous connector image could not be retrieved.")
+
+        # Get the real connector version in case 'latest' is used in the config:
+        previous_connector_version = previous_connector_docker_runner._image.labels.get("io.airbyte.version")
+
+        if previous_connector_version == inputs.backward_compatibility_tests_config.disable_for_version:
+            pytest.skip(f"Backward compatibility tests are disabled for version {previous_connector_version}.")
+        return False
 
     def test_config_match_spec(self, actual_connector_spec: ConnectorSpecification, connector_config: SecretDict):
         """Check that config matches the actual schema from the spec call"""
@@ -163,7 +176,26 @@ class TestSpec(BaseTest):
         diff = params - schema_path
         assert diff == set(), f"Specified oauth fields are missed from spec schema: {diff}"
 
-    def test_additional_properties_is_true(self, actual_connector_spec):
+    @pytest.mark.default_timeout(60)
+    @pytest.mark.backward_compatibility
+    def test_backward_compatibility(
+        self,
+        skip_backward_compatibility_tests: bool,
+        actual_connector_spec: ConnectorSpecification,
+        previous_connector_spec: ConnectorSpecification,
+        number_of_configs_to_generate: int = 100,
+    ):
+        """Check if the current spec is backward_compatible:
+        1. Perform multiple hardcoded syntactic checks with SpecDiffChecker.
+        2. Validate fake generated previous configs against the actual connector specification with validate_previous_configs.
+        """
+        assert isinstance(actual_connector_spec, ConnectorSpecification) and isinstance(previous_connector_spec, ConnectorSpecification)
+        spec_diff = self.compute_spec_diff(actual_connector_spec, previous_connector_spec)
+        checker = SpecDiffChecker(spec_diff)
+        checker.assert_spec_is_backward_compatible()
+        validate_previous_configs(previous_connector_spec, actual_connector_spec, number_of_configs_to_generate)
+
+    def test_additional_properties_is_true(self, actual_connector_spec: ConnectorSpecification):
         """Check that value of the "additionalProperties" field is always true.
         A spec declaring "additionalProperties": false introduces the risk of accidental breaking changes.
         Specifically, when removing a property from the spec, existing connector configs will no longer be valid.
