@@ -22,6 +22,11 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Sets;
 import io.airbyte.commons.json.Jsons;
+import io.airbyte.commons.temporal.TemporalJobType;
+import io.airbyte.commons.temporal.TemporalWorkflowUtils;
+import io.airbyte.commons.temporal.scheduling.ConnectionManagerWorkflow;
+import io.airbyte.commons.temporal.scheduling.ConnectionManagerWorkflow.JobInformation;
+import io.airbyte.commons.temporal.scheduling.state.WorkflowState;
 import io.airbyte.config.ConnectorJobOutput;
 import io.airbyte.config.FailureReason;
 import io.airbyte.config.JobCheckConnectionConfig;
@@ -33,16 +38,13 @@ import io.airbyte.config.StandardDiscoverCatalogInput;
 import io.airbyte.config.StandardSyncInput;
 import io.airbyte.config.helpers.LogClientSingleton;
 import io.airbyte.config.persistence.StreamResetPersistence;
+import io.airbyte.persistence.job.models.IntegrationLauncherConfig;
+import io.airbyte.persistence.job.models.JobRunConfig;
 import io.airbyte.protocol.models.ConfiguredAirbyteCatalog;
 import io.airbyte.protocol.models.StreamDescriptor;
-import io.airbyte.scheduler.models.IntegrationLauncherConfig;
-import io.airbyte.scheduler.models.JobRunConfig;
 import io.airbyte.workers.temporal.TemporalClient.ManualOperationResult;
 import io.airbyte.workers.temporal.check.connection.CheckConnectionWorkflow;
 import io.airbyte.workers.temporal.discover.catalog.DiscoverCatalogWorkflow;
-import io.airbyte.workers.temporal.scheduling.ConnectionManagerWorkflow;
-import io.airbyte.workers.temporal.scheduling.ConnectionManagerWorkflow.JobInformation;
-import io.airbyte.workers.temporal.scheduling.state.WorkflowState;
 import io.airbyte.workers.temporal.spec.SpecWorkflow;
 import io.airbyte.workers.temporal.sync.SyncWorkflow;
 import io.temporal.api.enums.v1.WorkflowExecutionStatus;
@@ -99,6 +101,8 @@ class TemporalClientTest {
   private WorkflowServiceStubs workflowServiceStubs;
   private WorkflowServiceBlockingStub workflowServiceBlockingStub;
   private StreamResetPersistence streamResetPersistence;
+  private ConnectionManagerUtils connectionManagerUtils;
+  private StreamResetRecordsHelper streamResetRecordsHelper;
 
   @BeforeEach
   void setup() throws IOException {
@@ -112,7 +116,11 @@ class TemporalClientTest {
     when(workflowServiceStubs.blockingStub()).thenReturn(workflowServiceBlockingStub);
     streamResetPersistence = mock(StreamResetPersistence.class);
     mockWorkflowStatus(WorkflowExecutionStatus.WORKFLOW_EXECUTION_STATUS_RUNNING);
-    temporalClient = spy(new TemporalClient(workflowClient, workspaceRoot, workflowServiceStubs, streamResetPersistence));
+    connectionManagerUtils = spy(new ConnectionManagerUtils());
+    streamResetRecordsHelper = mock(StreamResetRecordsHelper.class);
+    temporalClient =
+        spy(new TemporalClient(workspaceRoot, workflowClient, workflowServiceStubs, streamResetPersistence, connectionManagerUtils,
+            streamResetRecordsHelper));
   }
 
   @Nested
@@ -174,19 +182,21 @@ class TemporalClientTest {
     @Test
     void testSubmitGetSpec() {
       final SpecWorkflow specWorkflow = mock(SpecWorkflow.class);
-      when(workflowClient.newWorkflowStub(SpecWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.GET_SPEC))).thenReturn(specWorkflow);
+      when(workflowClient.newWorkflowStub(SpecWorkflow.class, TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.GET_SPEC)))
+          .thenReturn(specWorkflow);
       final JobGetSpecConfig getSpecConfig = new JobGetSpecConfig().withDockerImage(IMAGE_NAME1);
 
       temporalClient.submitGetSpec(JOB_UUID, ATTEMPT_ID, getSpecConfig);
       specWorkflow.run(JOB_RUN_CONFIG, UUID_LAUNCHER_CONFIG);
-      verify(workflowClient).newWorkflowStub(SpecWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.GET_SPEC));
+      verify(workflowClient).newWorkflowStub(SpecWorkflow.class, TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.GET_SPEC));
     }
 
     @Test
     void testSubmitCheckConnection() {
       final CheckConnectionWorkflow checkConnectionWorkflow = mock(CheckConnectionWorkflow.class);
-      when(workflowClient.newWorkflowStub(CheckConnectionWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.CHECK_CONNECTION)))
-          .thenReturn(checkConnectionWorkflow);
+      when(
+          workflowClient.newWorkflowStub(CheckConnectionWorkflow.class, TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.CHECK_CONNECTION)))
+              .thenReturn(checkConnectionWorkflow);
       final JobCheckConnectionConfig checkConnectionConfig = new JobCheckConnectionConfig()
           .withDockerImage(IMAGE_NAME1)
           .withConnectionConfiguration(Jsons.emptyObject());
@@ -195,13 +205,14 @@ class TemporalClientTest {
 
       temporalClient.submitCheckConnection(JOB_UUID, ATTEMPT_ID, checkConnectionConfig);
       checkConnectionWorkflow.run(JOB_RUN_CONFIG, UUID_LAUNCHER_CONFIG, input);
-      verify(workflowClient).newWorkflowStub(CheckConnectionWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.CHECK_CONNECTION));
+      verify(workflowClient).newWorkflowStub(CheckConnectionWorkflow.class,
+          TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.CHECK_CONNECTION));
     }
 
     @Test
     void testSubmitDiscoverSchema() {
       final DiscoverCatalogWorkflow discoverCatalogWorkflow = mock(DiscoverCatalogWorkflow.class);
-      when(workflowClient.newWorkflowStub(DiscoverCatalogWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.DISCOVER_SCHEMA)))
+      when(workflowClient.newWorkflowStub(DiscoverCatalogWorkflow.class, TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.DISCOVER_SCHEMA)))
           .thenReturn(discoverCatalogWorkflow);
       final JobDiscoverCatalogConfig checkConnectionConfig = new JobDiscoverCatalogConfig()
           .withDockerImage(IMAGE_NAME1)
@@ -211,13 +222,14 @@ class TemporalClientTest {
 
       temporalClient.submitDiscoverSchema(JOB_UUID, ATTEMPT_ID, checkConnectionConfig);
       discoverCatalogWorkflow.run(JOB_RUN_CONFIG, UUID_LAUNCHER_CONFIG, input);
-      verify(workflowClient).newWorkflowStub(DiscoverCatalogWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.DISCOVER_SCHEMA));
+      verify(workflowClient).newWorkflowStub(DiscoverCatalogWorkflow.class,
+          TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.DISCOVER_SCHEMA));
     }
 
     @Test
     void testSubmitSync() {
       final SyncWorkflow discoverCatalogWorkflow = mock(SyncWorkflow.class);
-      when(workflowClient.newWorkflowStub(SyncWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.SYNC)))
+      when(workflowClient.newWorkflowStub(SyncWorkflow.class, TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.SYNC)))
           .thenReturn(discoverCatalogWorkflow);
       final JobSyncConfig syncConfig = new JobSyncConfig()
           .withSourceDockerImage(IMAGE_NAME1)
@@ -243,7 +255,7 @@ class TemporalClientTest {
 
       temporalClient.submitSync(JOB_ID, ATTEMPT_ID, syncConfig, CONNECTION_ID);
       discoverCatalogWorkflow.run(JOB_RUN_CONFIG, LAUNCHER_CONFIG, destinationLauncherConfig, input, CONNECTION_ID);
-      verify(workflowClient).newWorkflowStub(SyncWorkflow.class, TemporalUtils.getWorkflowOptions(TemporalJobType.SYNC));
+      verify(workflowClient).newWorkflowStub(SyncWorkflow.class, TemporalWorkflowUtils.buildWorkflowOptions(TemporalJobType.SYNC));
     }
 
     @Test
@@ -287,10 +299,8 @@ class TemporalClientTest {
       final UUID nonMigratedId = UUID.randomUUID();
       final UUID migratedId = UUID.randomUUID();
 
-      doReturn(false)
-          .when(temporalClient).isInRunningWorkflowCache(ConnectionManagerUtils.getConnectionManagerName(nonMigratedId));
-      doReturn(true)
-          .when(temporalClient).isInRunningWorkflowCache(ConnectionManagerUtils.getConnectionManagerName(migratedId));
+      when(temporalClient.isInRunningWorkflowCache(connectionManagerUtils.getConnectionManagerName(nonMigratedId))).thenReturn(false);
+      when(temporalClient.isInRunningWorkflowCache(connectionManagerUtils.getConnectionManagerName(migratedId))).thenReturn(true);
 
       doNothing()
           .when(temporalClient).refreshRunningWorkflow();
@@ -568,6 +578,7 @@ class TemporalClientTest {
       assertEquals(JOB_ID, result.getJobId().get());
       assertFalse(result.getFailingReason().isPresent());
       verify(mConnectionManagerWorkflow).cancelJob();
+      verify(streamResetRecordsHelper).deleteStreamResetRecordsForJob(JOB_ID, CONNECTION_ID);
     }
 
     @Test
