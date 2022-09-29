@@ -29,4 +29,4 @@ metadata:
   name: airbyte-managed-cert
 spec:
   domains:
-    - airbyte-dev.google.seibert-media.net
+    - airbyte-holzrichter.google.seibert-media.net
