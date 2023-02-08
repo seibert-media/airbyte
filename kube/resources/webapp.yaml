@@ -40,6 +40,11 @@ spec:
                 configMapKeyRef:
                   name: airbyte-env
                   key: API_URL
+            - name: CONNECTOR_BUILDER_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: airbyte-env
+                  key: CONNECTOR_BUILDER_API_URL
             - name: TRACKING_STRATEGY
               valueFrom:
                 configMapKeyRef:
@@ -50,5 +55,10 @@ spec:
                 configMapKeyRef:
                   name: airbyte-env
                   key: INTERNAL_API_HOST
+            - name: CONNECTOR_BUILDER_API_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: airbyte-env
+                  key: CONNECTOR_BUILDER_API_HOST
           ports:
             - containerPort: 80

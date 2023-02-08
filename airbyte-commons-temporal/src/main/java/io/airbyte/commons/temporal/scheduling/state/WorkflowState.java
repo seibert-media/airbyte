@@ -8,6 +8,7 @@ import io.airbyte.commons.temporal.scheduling.state.listener.WorkflowStateChange
 import io.airbyte.commons.temporal.scheduling.state.listener.WorkflowStateChangedListener.ChangedStateEvent;
 import io.airbyte.commons.temporal.scheduling.state.listener.WorkflowStateChangedListener.StateField;
 import java.util.UUID;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -29,16 +30,21 @@ public class WorkflowState {
   private boolean cancelled = false;
   private boolean failed = false;
   @Deprecated
+  @Getter(AccessLevel.NONE)
   private final boolean resetConnection = false;
   @Deprecated
+  @Getter(AccessLevel.NONE)
   private final boolean continueAsReset = false;
-  private boolean retryFailedActivity = false;
+  @Deprecated
+  @Getter(AccessLevel.NONE)
   private boolean quarantined = false;
   private boolean success = true;
   private boolean cancelledForReset = false;
   @Deprecated
+  @Getter(AccessLevel.NONE)
   private final boolean resetWithScheduling = false;
   private boolean doneWaiting = false;
+  private boolean skipSchedulingNextWorkflow = false;
 
   public void setRunning(final boolean running) {
     final ChangedStateEvent event = new ChangedStateEvent(
@@ -88,22 +94,6 @@ public class WorkflowState {
     this.failed = failed;
   }
 
-  public void setRetryFailedActivity(final boolean retryFailedActivity) {
-    final ChangedStateEvent event = new ChangedStateEvent(
-        StateField.RETRY_FAILED_ACTIVITY,
-        retryFailedActivity);
-    stateChangedListener.addEvent(id, event);
-    this.retryFailedActivity = retryFailedActivity;
-  }
-
-  public void setQuarantined(final boolean quarantined) {
-    final ChangedStateEvent event = new ChangedStateEvent(
-        StateField.QUARANTINED,
-        quarantined);
-    stateChangedListener.addEvent(id, event);
-    this.quarantined = quarantined;
-  }
-
   public void setSuccess(final boolean success) {
     final ChangedStateEvent event = new ChangedStateEvent(
         StateField.SUCCESS,
@@ -128,6 +118,14 @@ public class WorkflowState {
     this.doneWaiting = doneWaiting;
   }
 
+  public void setSkipSchedulingNextWorkflow(final boolean skipSchedulingNextWorkflow) {
+    final ChangedStateEvent event = new ChangedStateEvent(
+        StateField.SKIP_SCHEDULING_NEXT_WORKFLOW,
+        skipSchedulingNextWorkflow);
+    stateChangedListener.addEvent(id, event);
+    this.skipSchedulingNextWorkflow = skipSchedulingNextWorkflow;
+  }
+
   // TODO: bmoric -> This is noisy when inpecting the list of event, it should be just a single reset
   // event.
   public void reset() {
@@ -137,10 +135,9 @@ public class WorkflowState {
     this.setUpdated(false);
     this.setCancelled(false);
     this.setFailed(false);
-    this.setRetryFailedActivity(false);
     this.setSuccess(false);
-    this.setQuarantined(false);
     this.setDoneWaiting(false);
+    this.setSkipSchedulingNextWorkflow(false);
   }
 
 }

@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
 import { useIntl } from "react-intl";
 
-import StatusIcon from "components/StatusIcon";
-import { StatusIconStatus } from "components/StatusIcon/StatusIcon";
+import { StatusIcon } from "components/ui/StatusIcon";
+import { StatusIconStatus } from "components/ui/StatusIcon/StatusIcon";
 
 import { Status } from "../types";
 
@@ -17,7 +17,7 @@ interface AllConnectionStatusConnectEntity {
   name: string;
   connector: string;
   status: string;
-  lastSyncStatus: string;
+  lastSyncStatus: string | null;
 }
 
 interface AllConnectionsStatusCellProps {

@@ -35,10 +35,6 @@ class InstagramStream(Stream, ABC):
         fields = list(self.get_json_schema().get("properties", {}).keys())
         return list(set(fields) - set(non_object_fields))
 
-    def upgrade_state_to_latest_format(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
-        """Upgrade state to latest format and return new state object"""
-        return copy.deepcopy(state)
-
     def request_params(
         self,
         stream_slice: Mapping[str, Any] = None,
@@ -222,6 +218,8 @@ class UserInsights(InstagramIncrementalStream):
             state_value = stream_state.get(account_id, {}).get(self.cursor_field)
             start_date = pendulum.parse(state_value) if state_value else self._start_date
             start_date = max(start_date, self._start_date, pendulum.now().subtract(days=self.buffer_days))
+            if start_date > pendulum.now():
+                continue
             for since in pendulum.period(start_date, self._end_date).range("days", self.days_increment):
                 until = since.add(days=self.days_increment)
                 self.logger.info(f"Reading insights between {since.date()} and {until.date()}")
@@ -250,14 +248,6 @@ class UserInsights(InstagramIncrementalStream):
             if not isinstance(value, Mapping):
                 return True
         return False
-
-    def upgrade_state_to_latest_format(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
-        """Upgrade state to latest format and return new state object"""
-        if self._state_has_legacy_format(state):
-            self.logger.info(f"The {self.name} state has old format, converting...")
-            return {account_id: {self.cursor_field: str(cursor_value)} for account_id, cursor_value in state.items()}
-
-        return super().upgrade_state_to_latest_format(state)
 
     def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]):
         """Update stream state from latest record"""

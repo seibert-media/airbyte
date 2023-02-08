@@ -2,11 +2,10 @@ import { Formik } from "formik";
 import { FormattedMessage, useIntl } from "react-intl";
 import * as yup from "yup";
 
-import HeadTitle from "components/HeadTitle";
+import { HeadTitle } from "components/common/HeadTitle";
 
-import { FieldError } from "../lib/errors/FieldError";
-import { useAuthService } from "../services/auth/AuthService";
-import { EmailLinkErrorCodes } from "../services/auth/types";
+import { isGdprCountry } from "utils/dataPrivacy";
+
 import { FieldItem, Form } from "./auth/components/FormComponents";
 import { FormTitle } from "./auth/components/FormTitle";
 import {
@@ -18,6 +17,9 @@ import {
   SignupButton,
   SignupFormStatusMessage,
 } from "./auth/SignupPage/components/SignupForm";
+import { FieldError } from "../lib/errors/FieldError";
+import { useAuthService } from "../services/auth/AuthService";
+import { EmailLinkErrorCodes } from "../services/auth/types";
 
 const ValidationSchema = yup.object().shape({
   name: yup.string().required("form.empty.error"),
@@ -35,7 +37,7 @@ export const AcceptEmailInvite: React.FC = () => {
         name: "",
         email: "",
         password: "",
-        news: true,
+        news: !isGdprCountry(),
       }}
       validationSchema={ValidationSchema}
       onSubmit={async ({ name, email, password, news }, { setFieldError, setStatus }) => {
@@ -92,3 +94,5 @@ export const AcceptEmailInvite: React.FC = () => {
     </>
   );
 };
+
+export default AcceptEmailInvite;

@@ -1,19 +1,19 @@
+import { createColumnHelper } from "@tanstack/react-table";
 import queryString from "query-string";
 import React, { useCallback } from "react";
 import { FormattedMessage } from "react-intl";
 import { useNavigate } from "react-router-dom";
-import { CellProps } from "react-table";
 
-import { Table } from "components/ui/Table";
+import { NextTable } from "components/ui/NextTable";
+import { SortableTableHeader } from "components/ui/Table";
 
 import { useQuery } from "hooks/useQuery";
 
 import AllConnectionsStatusCell from "./components/AllConnectionsStatusCell";
 import ConnectEntitiesCell from "./components/ConnectEntitiesCell";
-import ConnectorCell from "./components/ConnectorCell";
-import LastSyncCell from "./components/LastSyncCell";
-import NameCell from "./components/NameCell";
-import SortButton from "./components/SortButton";
+import { ConnectorNameCell } from "./components/ConnectorNameCell";
+import { EntityNameCell } from "./components/EntityNameCell";
+import { LastSyncCell } from "./components/LastSyncCell";
 import styles from "./ImplementationTable.module.scss";
 import { EntityTableDataItem, SortOrderEnum } from "./types";
 
@@ -65,78 +65,76 @@ const ImplementationTable: React.FC<IProps> = ({ data, entity, onClickRow }) => 
   );
 
   const sortingData = React.useMemo(() => data.sort(sortData), [sortData, data]);
+
+  const columnHelper = createColumnHelper<EntityTableDataItem>();
+
   const columns = React.useMemo(
     () => [
-      {
-        Header: (
-          <>
+      columnHelper.accessor("entityName", {
+        header: () => (
+          <SortableTableHeader
+            onClick={() => onSortClick("entity")}
+            isActive={sortBy === "entity"}
+            isAscending={sortOrder === SortOrderEnum.ASC}
+          >
             <FormattedMessage id="tables.name" />
-            <SortButton
-              wasActive={sortBy === "entity"}
-              lowToLarge={sortOrder === SortOrderEnum.ASC}
-              onClick={() => onSortClick("entity")}
-            />
-          </>
+          </SortableTableHeader>
         ),
-        headerHighlighted: true,
-        accessor: "entityName",
-        customWidth: 40,
-        Cell: ({ cell, row }: CellProps<EntityTableDataItem>) => (
-          <NameCell value={cell.value} enabled={row.original.enabled} />
-        ),
-      },
-      {
-        Header: (
-          <>
+        meta: {
+          thClassName: styles.thEntityName,
+        },
+        cell: (props) => <EntityNameCell value={props.cell.getValue()} enabled={props.row.original.enabled} />,
+      }),
+      columnHelper.accessor("connectorName", {
+        header: () => (
+          <SortableTableHeader
+            onClick={() => onSortClick("connector")}
+            isActive={sortBy === "connector"}
+            isAscending={sortOrder === SortOrderEnum.ASC}
+          >
             <FormattedMessage id="tables.connector" />
-            <SortButton
-              wasActive={sortBy === "connector"}
-              lowToLarge={sortOrder === SortOrderEnum.ASC}
-              onClick={() => onSortClick("connector")}
-            />
-          </>
+          </SortableTableHeader>
         ),
-        accessor: "connectorName",
-        Cell: ({ cell, row }: CellProps<EntityTableDataItem>) => (
-          <ConnectorCell value={cell.value} enabled={row.original.enabled} img={row.original.connectorIcon} />
+        cell: (props) => (
+          <ConnectorNameCell
+            value={props.cell.getValue()}
+            icon={props.row.original.connectorIcon}
+            enabled={props.row.original.enabled}
+          />
         ),
-      },
-      {
-        Header: <FormattedMessage id={`tables.${entity}ConnectWith`} />,
-        accessor: "connectEntities",
-        Cell: ({ cell, row }: CellProps<EntityTableDataItem>) => (
-          <ConnectEntitiesCell values={cell.value} entity={entity} enabled={row.original.enabled} />
+      }),
+      columnHelper.accessor("connectEntities", {
+        header: () => <FormattedMessage id={`tables.${entity}ConnectWith`} />,
+        cell: (props) => (
+          <ConnectEntitiesCell values={props.cell.getValue()} entity={entity} enabled={props.row.original.enabled} />
         ),
-      },
-      {
-        Header: (
-          <>
+      }),
+      columnHelper.accessor("lastSync", {
+        header: () => (
+          <SortableTableHeader
+            onClick={() => onSortClick("lastSync")}
+            isActive={sortBy === "lastSync"}
+            isAscending={sortOrder === SortOrderEnum.ASC}
+          >
             <FormattedMessage id="tables.lastSync" />
-            <SortButton
-              wasActive={sortBy === "lastSync"}
-              lowToLarge={sortOrder === SortOrderEnum.ASC}
-              onClick={() => onSortClick("lastSync")}
-            />
-          </>
+          </SortableTableHeader>
         ),
-        accessor: "lastSync",
-        Cell: ({ cell, row }: CellProps<EntityTableDataItem>) => (
-          <LastSyncCell timeInSecond={cell.value} enabled={row.original.enabled} />
+        cell: (props) => (
+          <LastSyncCell timeInSeconds={props.cell.getValue() || 0} enabled={props.row.original.enabled} />
         ),
-      },
-      {
-        Header: <FormattedMessage id="sources.status" />,
+      }),
+      columnHelper.accessor("connectEntities", {
+        header: () => <FormattedMessage id="sources.status" />,
         id: "status",
-        accessor: "connectEntities",
-        Cell: ({ cell }: CellProps<EntityTableDataItem>) => <AllConnectionsStatusCell connectEntities={cell.value} />,
-      },
+        cell: (props) => <AllConnectionsStatusCell connectEntities={props.cell.getValue()} />,
+      }),
     ],
-    [entity, onSortClick, sortBy, sortOrder]
+    [columnHelper, entity, onSortClick, sortBy, sortOrder]
   );
 
   return (
     <div className={styles.content}>
-      <Table columns={columns} data={sortingData} onClickRow={onClickRow} erroredRows />
+      <NextTable columns={columns} data={sortingData} onClickRow={onClickRow} testId={`${entity}sTable`} />
     </div>
   );
 };

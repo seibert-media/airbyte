@@ -10,13 +10,13 @@ import { JobInfo } from "core/domain/job";
 import { useInitService } from "services/useInitService";
 import { isDefined } from "utils/common";
 
-import { SourceRead, SynchronousJobRead, WebBackendConnectionRead } from "../../core/request/AirbyteClient";
-import { useSuspenseQuery } from "../../services/connector/useSuspenseQuery";
-import { SCOPE_WORKSPACE } from "../../services/Scope";
-import { useDefaultRequestMiddlewares } from "../../services/useDefaultRequestMiddlewares";
 import { useAnalyticsService } from "./Analytics";
 import { useRemoveConnectionsFromList } from "./useConnectionHook";
 import { useCurrentWorkspace } from "./useWorkspace";
+import { SourceRead, WebBackendConnectionListItem } from "../../core/request/AirbyteClient";
+import { useSuspenseQuery } from "../../services/connector/useSuspenseQuery";
+import { SCOPE_WORKSPACE } from "../../services/Scope";
+import { useDefaultRequestMiddlewares } from "../../services/useDefaultRequestMiddlewares";
 
 export const sourcesKeys = {
   all: [SCOPE_WORKSPACE, "sources"] as const,
@@ -64,6 +64,14 @@ const useGetSource = <T extends string | undefined | null>(
   });
 };
 
+export const useInvalidateSource = <T extends string | undefined | null>(sourceId: T): (() => void) => {
+  const queryClient = useQueryClient();
+
+  return useCallback(() => {
+    queryClient.invalidateQueries(sourcesKeys.detail(sourceId ?? ""));
+  }, [queryClient, sourceId]);
+};
+
 const useCreateSource = () => {
   const service = useSourceService();
   const queryClient = useQueryClient();
@@ -103,7 +111,7 @@ const useDeleteSource = () => {
   const removeConnectionsFromList = useRemoveConnectionsFromList();
 
   return useMutation(
-    (payload: { source: SourceRead; connectionsWithSource: WebBackendConnectionRead[] }) =>
+    (payload: { source: SourceRead; connectionsWithSource: WebBackendConnectionListItem[] }) =>
       service.delete(payload.source.sourceId),
     {
       onSuccess: (_data, ctx) => {
@@ -149,13 +157,15 @@ const useUpdateSource = () => {
   );
 };
 
+export type SchemaError = (Error & { status: number; response: JobInfo }) | null;
+
 const useDiscoverSchema = (
   sourceId: string,
   disableCache?: boolean
 ): {
   isLoading: boolean;
   schema: SyncSchema;
-  schemaErrorStatus: { status: number; response: SynchronousJobRead } | null;
+  schemaErrorStatus: SchemaError;
   catalogId: string | undefined;
   onDiscoverSchema: () => Promise<void>;
 } => {
@@ -163,10 +173,7 @@ const useDiscoverSchema = (
   const [schema, setSchema] = useState<SyncSchema>({ streams: [] });
   const [catalogId, setCatalogId] = useState<string | undefined>("");
   const [isLoading, setIsLoading] = useState(false);
-  const [schemaErrorStatus, setSchemaErrorStatus] = useState<{
-    status: number;
-    response: JobInfo;
-  } | null>(null);
+  const [schemaErrorStatus, setSchemaErrorStatus] = useState<SchemaError>(null);
 
   const onDiscoverSchema = useCallback(async () => {
     setIsLoading(true);

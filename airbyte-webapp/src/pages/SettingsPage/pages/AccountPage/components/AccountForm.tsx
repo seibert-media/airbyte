@@ -4,11 +4,9 @@ import { FormattedMessage, useIntl } from "react-intl";
 import styled from "styled-components";
 import * as yup from "yup";
 
-import { Label, LabeledInput, LabeledSwitch, LoadingButton } from "components";
-import { InfoTooltip } from "components/base/Tooltip";
+import { LabeledInput } from "components";
 import { Row, Cell } from "components/SimpleTableComponents";
-
-import { useAdvancedModeSetting } from "hooks/services/useAdvancedModeSetting";
+import { Button } from "components/ui/Button";
 
 import styles from "./AccountForm.module.scss";
 
@@ -35,15 +33,6 @@ const Success = styled.div`
   color: ${({ theme }) => theme.successColor};
 `;
 
-const AdvancedModeSwitchLabel = () => (
-  <>
-    <FormattedMessage id="form.advancedMode.switchLabel" />
-    <InfoTooltip>
-      <FormattedMessage id="form.advancedMode.tooltip" />
-    </InfoTooltip>
-  </>
-);
-
 const accountValidationSchema = yup.object().shape({
   email: yup.string().email("form.email.error").required("form.empty.error"),
 });
@@ -57,21 +46,19 @@ interface AccountFormProps {
 
 const AccountForm: React.FC<AccountFormProps> = ({ email, onSubmit, successMessage, errorMessage }) => {
   const { formatMessage } = useIntl();
-  const [isAdvancedMode, setAdvancedMode] = useAdvancedModeSetting();
 
   return (
     <Formik
-      initialValues={{ email, advancedMode: isAdvancedMode }}
+      initialValues={{ email }}
       validateOnBlur
       validateOnChange={false}
       validationSchema={accountValidationSchema}
       enableReinitialize
       onSubmit={(data) => {
         onSubmit(data);
-        setAdvancedMode(data.advancedMode);
       }}
     >
-      {({ isSubmitting, dirty, values, setFieldValue }) => (
+      {({ isSubmitting, dirty, values }) => (
         <EmailForm>
           <InputRow className={styles.formItem}>
             <Cell flex={3}>
@@ -90,24 +77,10 @@ const AccountForm: React.FC<AccountFormProps> = ({ email, onSubmit, successMessa
               </Field>
             </Cell>
           </InputRow>
-          <div className={styles.formItem}>
-            <Label>
-              <FormattedMessage id="form.advancedMode.label" />
-            </Label>
-            <Field name="advancedMode">
-              {({ field }: FieldProps<boolean>) => (
-                <LabeledSwitch
-                  label={<AdvancedModeSwitchLabel />}
-                  checked={field.value}
-                  onChange={() => setFieldValue(field.name, !field.value)}
-                />
-              )}
-            </Field>
-          </div>
           <div className={styles.submit}>
-            <LoadingButton isLoading={isSubmitting} type="submit" disabled={!dirty || !values.email}>
+            <Button isLoading={isSubmitting} type="submit" disabled={!dirty || !values.email}>
               <FormattedMessage id="form.saveChanges" />
-            </LoadingButton>
+            </Button>
           </div>
           {!dirty &&
             (successMessage ? (

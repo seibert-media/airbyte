@@ -4,7 +4,8 @@
 
 package io.airbyte.persistence.job;
 
-import io.airbyte.config.ActorDefinitionResourceRequirements;
+import com.fasterxml.jackson.databind.JsonNode;
+import io.airbyte.commons.version.Version;
 import io.airbyte.config.DestinationConnection;
 import io.airbyte.config.JobConfig;
 import io.airbyte.config.JobConfig.ConfigType;
@@ -14,11 +15,10 @@ import io.airbyte.config.JobTypeResourceLimit.JobType;
 import io.airbyte.config.ResetSourceConfiguration;
 import io.airbyte.config.ResourceRequirements;
 import io.airbyte.config.SourceConnection;
+import io.airbyte.config.StandardDestinationDefinition;
+import io.airbyte.config.StandardSourceDefinition;
 import io.airbyte.config.StandardSync;
 import io.airbyte.config.StandardSyncOperation;
-import io.airbyte.config.State;
-import io.airbyte.config.helpers.StateMessageHelper;
-import io.airbyte.config.persistence.StatePersistence;
 import io.airbyte.protocol.models.CatalogHelpers;
 import io.airbyte.protocol.models.ConfiguredAirbyteCatalog;
 import io.airbyte.protocol.models.DestinationSyncMode;
@@ -36,14 +36,11 @@ public class DefaultJobCreator implements JobCreator {
 
   private final JobPersistence jobPersistence;
   private final ResourceRequirements workerResourceRequirements;
-  private final StatePersistence statePersistence;
 
   public DefaultJobCreator(final JobPersistence jobPersistence,
-                           final ResourceRequirements workerResourceRequirements,
-                           final StatePersistence statePersistence) {
+                           final ResourceRequirements workerResourceRequirements) {
     this.jobPersistence = jobPersistence;
     this.workerResourceRequirements = workerResourceRequirements;
-    this.statePersistence = statePersistence;
   }
 
   @Override
@@ -51,10 +48,14 @@ public class DefaultJobCreator implements JobCreator {
                                       final DestinationConnection destination,
                                       final StandardSync standardSync,
                                       final String sourceDockerImageName,
+                                      final Version sourceProtocolVersion,
                                       final String destinationDockerImageName,
+                                      final Version destinationProtocolVersion,
                                       final List<StandardSyncOperation> standardSyncOperations,
-                                      @Nullable final ActorDefinitionResourceRequirements sourceResourceReqs,
-                                      @Nullable final ActorDefinitionResourceRequirements destinationResourceReqs)
+                                      @Nullable final JsonNode webhookOperationConfigs,
+                                      final StandardSourceDefinition sourceDefinition,
+                                      final StandardDestinationDefinition destinationDefinition,
+                                      final UUID workspaceId)
       throws IOException {
     // reusing this isn't going to quite work.
 
@@ -63,12 +64,12 @@ public class DefaultJobCreator implements JobCreator {
         workerResourceRequirements);
     final ResourceRequirements mergedSrcResourceReq = ResourceRequirementsUtils.getResourceRequirements(
         standardSync.getResourceRequirements(),
-        sourceResourceReqs,
+        sourceDefinition.getResourceRequirements(),
         workerResourceRequirements,
         JobType.SYNC);
     final ResourceRequirements mergedDstResourceReq = ResourceRequirementsUtils.getResourceRequirements(
         standardSync.getResourceRequirements(),
-        destinationResourceReqs,
+        destinationDefinition.getResourceRequirements(),
         workerResourceRequirements,
         JobType.SYNC);
 
@@ -77,17 +78,18 @@ public class DefaultJobCreator implements JobCreator {
         .withNamespaceFormat(standardSync.getNamespaceFormat())
         .withPrefix(standardSync.getPrefix())
         .withSourceDockerImage(sourceDockerImageName)
-        .withSourceConfiguration(source.getConfiguration())
+        .withSourceProtocolVersion(sourceProtocolVersion)
         .withDestinationDockerImage(destinationDockerImageName)
-        .withDestinationConfiguration(destination.getConfiguration())
+        .withDestinationProtocolVersion(destinationProtocolVersion)
         .withOperationSequence(standardSyncOperations)
+        .withWebhookOperationConfigs(webhookOperationConfigs)
         .withConfiguredAirbyteCatalog(standardSync.getCatalog())
-        .withState(null)
         .withResourceRequirements(mergedOrchestratorResourceReq)
         .withSourceResourceRequirements(mergedSrcResourceReq)
-        .withDestinationResourceRequirements(mergedDstResourceReq);
-
-    getCurrentConnectionState(standardSync.getConnectionId()).ifPresent(jobSyncConfig::withState);
+        .withDestinationResourceRequirements(mergedDstResourceReq)
+        .withIsSourceCustomConnector(sourceDefinition.getCustom())
+        .withIsDestinationCustomConnector(destinationDefinition.getCustom())
+        .withWorkspaceId(workspaceId);
 
     final JobConfig jobConfig = new JobConfig()
         .withConfigType(ConfigType.SYNC)
@@ -99,23 +101,27 @@ public class DefaultJobCreator implements JobCreator {
   public Optional<Long> createResetConnectionJob(final DestinationConnection destination,
                                                  final StandardSync standardSync,
                                                  final String destinationDockerImage,
+                                                 final Version destinationProtocolVersion,
+                                                 final boolean isDestinationCustomConnector,
                                                  final List<StandardSyncOperation> standardSyncOperations,
                                                  final List<StreamDescriptor> streamsToReset)
       throws IOException {
     final ConfiguredAirbyteCatalog configuredAirbyteCatalog = standardSync.getCatalog();
     configuredAirbyteCatalog.getStreams().forEach(configuredAirbyteStream -> {
       final StreamDescriptor streamDescriptor = CatalogHelpers.extractDescriptor(configuredAirbyteStream);
-      configuredAirbyteStream.setSyncMode(SyncMode.FULL_REFRESH);
       if (streamsToReset.contains(streamDescriptor)) {
         // The Reset Source will emit no record messages for any streams, so setting the destination sync
         // mode to OVERWRITE will empty out this stream in the destination.
         // Note: streams in streamsToReset that are NOT in this configured catalog (i.e. deleted streams)
         // will still have their state reset by the Reset Source, but will not be modified in the
         // destination since they are not present in the catalog that is sent to the destination.
+        configuredAirbyteStream.setSyncMode(SyncMode.FULL_REFRESH);
         configuredAirbyteStream.setDestinationSyncMode(DestinationSyncMode.OVERWRITE);
       } else {
         // Set streams that are not being reset to APPEND so that they are not modified in the destination
-        configuredAirbyteStream.setDestinationSyncMode(DestinationSyncMode.APPEND);
+        if (configuredAirbyteStream.getDestinationSyncMode() == DestinationSyncMode.OVERWRITE) {
+          configuredAirbyteStream.setDestinationSyncMode(DestinationSyncMode.APPEND);
+        }
       }
     });
     final JobResetConnectionConfig resetConnectionConfig = new JobResetConnectionConfig()
@@ -123,24 +129,20 @@ public class DefaultJobCreator implements JobCreator {
         .withNamespaceFormat(standardSync.getNamespaceFormat())
         .withPrefix(standardSync.getPrefix())
         .withDestinationDockerImage(destinationDockerImage)
-        .withDestinationConfiguration(destination.getConfiguration())
+        .withDestinationProtocolVersion(destinationProtocolVersion)
         .withOperationSequence(standardSyncOperations)
         .withConfiguredAirbyteCatalog(configuredAirbyteCatalog)
         .withResourceRequirements(ResourceRequirementsUtils.getResourceRequirements(
             standardSync.getResourceRequirements(),
             workerResourceRequirements))
-        .withResetSourceConfiguration(new ResetSourceConfiguration().withStreamsToReset(streamsToReset));
-
-    getCurrentConnectionState(standardSync.getConnectionId()).ifPresent(resetConnectionConfig::withState);
+        .withResetSourceConfiguration(new ResetSourceConfiguration().withStreamsToReset(streamsToReset))
+        .withIsSourceCustomConnector(false)
+        .withIsDestinationCustomConnector(isDestinationCustomConnector);
 
     final JobConfig jobConfig = new JobConfig()
         .withConfigType(ConfigType.RESET_CONNECTION)
         .withResetConnection(resetConnectionConfig);
     return jobPersistence.enqueueJob(standardSync.getConnectionId().toString(), jobConfig);
-  }
-
-  private Optional<State> getCurrentConnectionState(final UUID connectionId) throws IOException {
-    return statePersistence.getCurrentState(connectionId).map(StateMessageHelper::getState);
   }
 
 }

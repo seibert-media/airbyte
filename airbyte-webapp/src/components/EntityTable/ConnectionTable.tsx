@@ -1,39 +1,35 @@
+import { createColumnHelper } from "@tanstack/react-table";
 import queryString from "query-string";
 import React, { useCallback } from "react";
 import { FormattedMessage } from "react-intl";
 import { useNavigate } from "react-router-dom";
-import { CellProps } from "react-table";
-import styled from "styled-components";
 
-import { Table } from "components/ui/Table";
+import { SortableTableHeader } from "components/ui/Table";
 
-import { ConnectionScheduleType } from "core/request/AirbyteClient";
+import { ConnectionScheduleType, SchemaChange } from "core/request/AirbyteClient";
 import { FeatureItem, useFeature } from "hooks/services/Feature";
 import { useQuery } from "hooks/useQuery";
 
 import ConnectionSettingsCell from "./components/ConnectionSettingsCell";
-import ConnectorCell from "./components/ConnectorCell";
-import FrequencyCell from "./components/FrequencyCell";
-import LastSyncCell from "./components/LastSyncCell";
-import NameCell from "./components/NameCell";
-import SortButton from "./components/SortButton";
-import StatusCell from "./components/StatusCell";
-import { ITableDataItem, SortOrderEnum } from "./types";
+import { ConnectionStatusCell } from "./components/ConnectionStatusCell";
+import { ConnectorNameCell } from "./components/ConnectorNameCell";
+import { FrequencyCell } from "./components/FrequencyCell";
+import { LastSyncCell } from "./components/LastSyncCell";
+import { StatusCell } from "./components/StatusCell";
+import styles from "./ConnectionTable.module.scss";
+import { ConnectionTableDataItem, SortOrderEnum } from "./types";
+import { NextTable } from "../ui/NextTable";
 
-const Content = styled.div`
-  margin: 0 32px 0 27px;
-`;
-
-interface IProps {
-  data: ITableDataItem[];
+interface ConnectionTableProps {
+  data: ConnectionTableDataItem[];
   entity: "source" | "destination" | "connection";
-  onClickRow?: (data: ITableDataItem) => void;
-  onSync: (id: string) => void;
+  onClickRow?: (data: ConnectionTableDataItem) => void;
 }
 
-const ConnectionTable: React.FC<IProps> = ({ data, entity, onClickRow, onSync }) => {
+const ConnectionTable: React.FC<ConnectionTableProps> = ({ data, entity, onClickRow }) => {
   const navigate = useNavigate();
   const query = useQuery<{ sortBy?: string; order?: SortOrderEnum }>();
+  const allowAutoDetectSchema = useFeature(FeatureItem.AllowAutoDetectSchema);
   const allowSync = useFeature(FeatureItem.AllowSync);
 
   const sortBy = query.sortBy || "entityName";
@@ -76,126 +72,129 @@ const ConnectionTable: React.FC<IProps> = ({ data, entity, onClickRow, onSync })
 
   const sortingData = React.useMemo(() => data.sort(sortData), [sortData, data]);
 
+  const columnHelper = createColumnHelper<ConnectionTableDataItem>();
+
   const columns = React.useMemo(
     () => [
-      {
-        Header: (
-          <>
+      columnHelper.accessor("name", {
+        header: () => (
+          <SortableTableHeader
+            onClick={() => onSortClick("name")}
+            isActive={sortBy === "name"}
+            isAscending={sortOrder === SortOrderEnum.ASC}
+          >
             <FormattedMessage id="tables.name" />
-            <SortButton
-              wasActive={sortBy === "name"}
-              lowToLarge={sortOrder === SortOrderEnum.ASC}
-              onClick={() => onSortClick("name")}
-            />
-          </>
+          </SortableTableHeader>
         ),
-        headerHighlighted: true,
-        accessor: "name",
-        customWidth: 30,
-        Cell: ({ cell, row }: CellProps<ITableDataItem>) => (
-          <NameCell value={cell.value} enabled={row.original.enabled} status={row.original.lastSyncStatus} />
-        ),
-      },
-      {
-        Header: (
-          <>
-            {entity === "connection" ? (
-              <FormattedMessage id="tables.destinationConnectionToName" />
-            ) : (
-              <FormattedMessage id={`tables.${entity}ConnectionToName`} />
-            )}
-            <SortButton
-              wasActive={sortBy === "entityName"}
-              lowToLarge={sortOrder === SortOrderEnum.ASC}
-              onClick={() => onSortClick("entityName")}
-            />
-          </>
-        ),
-        headerHighlighted: true,
-        accessor: "entityName",
-        Cell: ({ cell, row }: CellProps<ITableDataItem>) => (
-          <NameCell
-            value={cell.value}
-            enabled={row.original.enabled}
-            icon={entity === "connection"}
-            img={row.original.entityIcon}
+        meta: {
+          thClassName: styles.width30,
+          responsive: true,
+        },
+        cell: (props) => (
+          <ConnectionStatusCell
+            status={props.row.original.lastSyncStatus}
+            value={props.cell.getValue()}
+            enabled={props.row.original.enabled}
           />
         ),
-      },
-      {
-        Header: (
-          <>
-            {entity === "connection" ? (
-              <FormattedMessage id="tables.sourceConnectionToName" />
-            ) : (
-              <FormattedMessage id="tables.connector" />
-            )}
-            <SortButton
-              wasActive={sortBy === "connectorName"}
-              lowToLarge={sortOrder === SortOrderEnum.ASC}
-              onClick={() => onSortClick("connectorName")}
+      }),
+      columnHelper.accessor("entityName", {
+        header: () => (
+          <SortableTableHeader
+            onClick={() => onSortClick("entityName")}
+            isActive={sortBy === "entityName"}
+            isAscending={sortOrder === SortOrderEnum.ASC}
+          >
+            <FormattedMessage
+              id={entity === "connection" ? "tables.destinationConnectionToName" : `tables.${entity}ConnectionToName`}
             />
-          </>
+          </SortableTableHeader>
         ),
-        accessor: "connectorName",
-        Cell: ({ cell, row }: CellProps<ITableDataItem>) => (
-          <ConnectorCell value={cell.value} enabled={row.original.enabled} img={row.original.connectorIcon} />
+        meta: {
+          thClassName: styles.width30,
+          responsive: true,
+        },
+        cell: (props) => (
+          <ConnectorNameCell
+            value={props.cell.getValue()}
+            icon={props.row.original.entityIcon}
+            enabled={props.row.original.enabled}
+          />
         ),
-      },
-
-      {
-        Header: <FormattedMessage id="tables.frequency" />,
-        accessor: "scheduleData",
-        Cell: ({ cell, row }: CellProps<ITableDataItem>) => (
-          <FrequencyCell value={cell.value} enabled={row.original.enabled} scheduleType={row.original.scheduleType} />
+      }),
+      columnHelper.accessor("connectorName", {
+        header: () => (
+          <SortableTableHeader
+            onClick={() => onSortClick("connectorName")}
+            isActive={sortBy === "connectorName"}
+            isAscending={sortOrder === SortOrderEnum.ASC}
+          >
+            <FormattedMessage id={entity === "connection" ? "tables.sourceConnectionToName" : "tables.connector"} />
+          </SortableTableHeader>
         ),
-      },
-      {
-        Header: (
-          <>
+        meta: {
+          thClassName: styles.width30,
+          responsive: true,
+        },
+        cell: (props) => (
+          <ConnectorNameCell
+            value={props.cell.getValue()}
+            icon={props.row.original.connectorIcon}
+            enabled={props.row.original.enabled}
+          />
+        ),
+      }),
+      columnHelper.accessor("scheduleData", {
+        header: () => <FormattedMessage id="tables.frequency" />,
+        cell: (props) => (
+          <FrequencyCell
+            value={props.cell.getValue()}
+            enabled={props.row.original.enabled}
+            scheduleType={props.row.original.scheduleType}
+          />
+        ),
+      }),
+      columnHelper.accessor("lastSync", {
+        header: () => (
+          <SortableTableHeader
+            onClick={() => onSortClick("lastSync")}
+            isActive={sortBy === "lastSync"}
+            isAscending={sortOrder === SortOrderEnum.ASC}
+          >
             <FormattedMessage id="tables.lastSync" />
-            <SortButton
-              wasActive={sortBy === "lastSync"}
-              lowToLarge={sortOrder === SortOrderEnum.ASC}
-              onClick={() => onSortClick("lastSync")}
-            />
-          </>
+          </SortableTableHeader>
         ),
-        accessor: "lastSync",
-        Cell: ({ cell, row }: CellProps<ITableDataItem>) => (
-          <LastSyncCell timeInSecond={cell.value} enabled={row.original.enabled} />
-        ),
-      },
-      {
-        Header: <FormattedMessage id="tables.enabled" />,
-        accessor: "enabled",
-        customWidth: 1,
-        Cell: ({ cell, row }: CellProps<ITableDataItem>) => (
+        cell: (props) => <LastSyncCell timeInSeconds={props.cell.getValue()} enabled={props.row.original.enabled} />,
+      }),
+      columnHelper.accessor("enabled", {
+        header: () => <FormattedMessage id="tables.enabled" />,
+        meta: {
+          thClassName: styles.thEnabled,
+        },
+        cell: (props) => (
           <StatusCell
-            enabled={cell.value}
-            id={row.original.connectionId}
-            isSyncing={row.original.isSyncing}
-            isManual={row.original.scheduleType === ConnectionScheduleType.manual}
-            onSync={onSync}
+            schemaChange={props.row.original.schemaChange}
+            enabled={props.cell.getValue()}
+            id={props.row.original.connectionId}
+            isSyncing={props.row.original.isSyncing}
+            isManual={props.row.original.scheduleType === ConnectionScheduleType.manual}
+            hasBreakingChange={allowAutoDetectSchema && props.row.original.schemaChange === SchemaChange.breaking}
             allowSync={allowSync}
           />
         ),
-      },
-      {
-        Header: "",
-        accessor: "connectionId",
-        customWidth: 1,
-        Cell: ({ cell }: CellProps<ITableDataItem>) => <ConnectionSettingsCell id={cell.value} />,
-      },
+      }),
+      columnHelper.accessor("connectionId", {
+        header: "",
+        meta: {
+          thClassName: styles.thConnectionSettings,
+        },
+        cell: (props) => <ConnectionSettingsCell id={props.cell.getValue()} />,
+      }),
     ],
-    [allowSync, entity, onSync, onSortClick, sortBy, sortOrder]
+    [columnHelper, sortBy, sortOrder, onSortClick, entity, allowAutoDetectSchema, allowSync]
   );
 
-  return (
-    <Content>
-      <Table columns={columns} data={sortingData} onClickRow={onClickRow} erroredRows />
-    </Content>
-  );
+  return <NextTable columns={columns} data={sortingData} onClickRow={onClickRow} testId="connectionsTable" />;
 };
 
 export default ConnectionTable;

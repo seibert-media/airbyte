@@ -4,6 +4,7 @@
 
 package io.airbyte.workers.config;
 
+import io.airbyte.commons.temporal.config.WorkerMode;
 import io.airbyte.config.Configs.DeploymentMode;
 import io.airbyte.config.persistence.ConfigRepository;
 import io.airbyte.persistence.job.WebUrlHelper;
@@ -12,7 +13,6 @@ import io.airbyte.persistence.job.errorreporter.JobErrorReportingClient;
 import io.airbyte.persistence.job.errorreporter.LoggingJobErrorReportingClient;
 import io.airbyte.persistence.job.errorreporter.SentryExceptionHelper;
 import io.airbyte.persistence.job.errorreporter.SentryJobErrorReportingClient;
-import io.airbyte.workers.normalization.NormalizationRunnerFactory;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
@@ -30,8 +30,7 @@ public class JobErrorReportingBeanFactory {
   @Singleton
   @Requires(property = "airbyte.worker.job.error-reporting.strategy",
             pattern = "(?i)^sentry$")
-  @Requires(property = "airbyte.worker.plane",
-            pattern = "(?i)^(?!data_plane).*")
+  @Requires(env = WorkerMode.CONTROL_PLANE)
   @Named("jobErrorReportingClient")
   public JobErrorReportingClient sentryJobErrorReportingClient(
                                                                @Value("${airbyte.worker.job.error-reporting.sentry.dsn}") final String sentryDsn) {
@@ -41,16 +40,14 @@ public class JobErrorReportingBeanFactory {
   @Singleton
   @Requires(property = "airbyte.worker.job.error-reporting.strategy",
             pattern = "(?i)^logging$")
-  @Requires(property = "airbyte.worker.plane",
-            pattern = "(?i)^(?!data_plane).*")
+  @Requires(env = WorkerMode.CONTROL_PLANE)
   @Named("jobErrorReportingClient")
   public JobErrorReportingClient loggingJobErrorReportingClient() {
     return new LoggingJobErrorReportingClient();
   }
 
   @Singleton
-  @Requires(property = "airbyte.worker.plane",
-            pattern = "(?i)^(?!data_plane).*")
+  @Requires(env = WorkerMode.CONTROL_PLANE)
   public JobErrorReporter jobErrorReporter(
                                            @Value("${airbyte.version}") final String airbyteVersion,
                                            final ConfigRepository configRepository,
@@ -61,8 +58,6 @@ public class JobErrorReportingBeanFactory {
         configRepository,
         deploymentMode,
         airbyteVersion,
-        NormalizationRunnerFactory.BASE_NORMALIZATION_IMAGE_NAME,
-        NormalizationRunnerFactory.NORMALIZATION_VERSION,
         webUrlHelper,
         jobErrorReportingClient.orElseGet(() -> new LoggingJobErrorReportingClient()));
   }

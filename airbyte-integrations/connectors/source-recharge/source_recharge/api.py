@@ -8,6 +8,7 @@ from typing import Any, Iterable, List, Mapping, MutableMapping, Optional
 
 import pendulum
 import requests
+from airbyte_cdk.sources.streams.availability_strategy import AvailabilityStrategy
 from airbyte_cdk.sources.streams.http import HttpStream
 from airbyte_cdk.sources.utils.transform import TransformConfig, TypeTransformer
 
@@ -19,6 +20,7 @@ class RechargeStream(HttpStream, ABC):
 
     limit = 250
     page_num = 1
+    raise_on_http_errors = True
 
     # regestring the default schema transformation
     transformer: TypeTransformer = TypeTransformer(TransformConfig.DefaultSchemaNormalization)
@@ -26,6 +28,10 @@ class RechargeStream(HttpStream, ABC):
     @property
     def data_path(self):
         return self.name
+
+    @property
+    def availability_strategy(self) -> Optional["AvailabilityStrategy"]:
+        return None
 
     def path(
         self, stream_state: Mapping[str, Any] = None, stream_slice: Mapping[str, Any] = None, next_page_token: Mapping[str, Any] = None
@@ -61,13 +67,17 @@ class RechargeStream(HttpStream, ABC):
             return [response_data]
 
     def should_retry(self, response: requests.Response) -> bool:
-        res = super().should_retry(response)
-        if res:
-            return res
-
-        # For some reason, successful responses contains incomplete data
         content_length = int(response.headers.get("Content-Length", 0))
-        return response.status_code == 200 and content_length > len(response.content)
+        incomplete_data_response = response.status_code == 200 and content_length > len(response.content)
+
+        if incomplete_data_response:
+            return True
+        elif response.status_code == requests.codes.FORBIDDEN:
+            setattr(self, "raise_on_http_errors", False)
+            self.logger.error(f"Skiping stream {self.name} because of a 403 error.")
+            return False
+
+        return super().should_retry(response)
 
 
 class IncrementalRechargeStream(RechargeStream, ABC):

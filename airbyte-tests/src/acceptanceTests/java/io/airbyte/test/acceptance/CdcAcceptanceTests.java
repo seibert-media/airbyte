@@ -85,7 +85,9 @@ import org.slf4j.LoggerFactory;
 @SuppressWarnings("PMD.JUnitTestsShouldIncludeAssert")
 class CdcAcceptanceTests {
 
-  record DestinationCdcRecordMatcher(JsonNode sourceRecord, Instant minUpdatedAt, Optional<Instant> minDeletedAt) {}
+  record DestinationCdcRecordMatcher(JsonNode sourceRecord, Instant minUpdatedAt, Optional<Instant> minDeletedAt) {
+
+  }
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BasicAcceptanceTests.class);
 
@@ -168,7 +170,7 @@ class CdcAcceptanceTests {
     final JobInfoRead connectionSyncRead1 = apiClient.getConnectionApi()
         .syncConnection(new ConnectionIdRequestBody().connectionId(connectionId));
     waitForSuccessfulJob(apiClient.getJobsApi(), connectionSyncRead1.getJob());
-    LOGGER.info("state after sync 1: {}", apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
+    LOGGER.info("state after sync 1: {}", apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
 
     final Database source = testHarness.getSourceDatabase();
 
@@ -218,7 +220,7 @@ class CdcAcceptanceTests {
     final JobInfoRead connectionSyncRead2 = apiClient.getConnectionApi()
         .syncConnection(new ConnectionIdRequestBody().connectionId(connectionId));
     waitForSuccessfulJob(apiClient.getJobsApi(), connectionSyncRead2.getJob());
-    LOGGER.info("state after sync 2: {}", apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
+    LOGGER.info("state after sync 2: {}", apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
 
     assertDestinationMatches(ID_AND_NAME_TABLE, expectedIdAndNameRecords);
     assertDestinationMatches(COLOR_PALETTE_TABLE, expectedColorPaletteRecords);
@@ -230,7 +232,7 @@ class CdcAcceptanceTests {
     final JobInfoRead jobInfoRead = apiClient.getConnectionApi().resetConnection(new ConnectionIdRequestBody().connectionId(connectionId));
     waitForSuccessfulJob(apiClient.getJobsApi(), jobInfoRead.getJob());
 
-    LOGGER.info("state after reset: {}", apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
+    LOGGER.info("state after reset: {}", apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
 
     assertDestinationMatches(ID_AND_NAME_TABLE, Collections.emptyList());
     assertDestinationMatches(COLOR_PALETTE_TABLE, Collections.emptyList());
@@ -241,7 +243,7 @@ class CdcAcceptanceTests {
     final JobInfoRead connectionSyncRead3 =
         apiClient.getConnectionApi().syncConnection(new ConnectionIdRequestBody().connectionId(connectionId));
     waitForSuccessfulJob(apiClient.getJobsApi(), connectionSyncRead3.getJob());
-    LOGGER.info("state after sync 3: {}", apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
+    LOGGER.info("state after sync 3: {}", apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
 
     expectedIdAndNameRecords = getCdcRecordMatchersFromSource(source, ID_AND_NAME_TABLE);
     assertDestinationMatches(ID_AND_NAME_TABLE, expectedIdAndNameRecords);
@@ -285,7 +287,7 @@ class CdcAcceptanceTests {
     final JobInfoRead connectionSyncRead1 = apiClient.getConnectionApi()
         .syncConnection(new ConnectionIdRequestBody().connectionId(connectionId));
     waitForSuccessfulJob(apiClient.getJobsApi(), connectionSyncRead1.getJob());
-    LOGGER.info("state after sync 1: {}", apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
+    LOGGER.info("state after sync 1: {}", apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
 
     final Database source = testHarness.getSourceDatabase();
     final List<DestinationCdcRecordMatcher> expectedIdAndNameRecords = getCdcRecordMatchersFromSource(source, ID_AND_NAME_TABLE);
@@ -309,7 +311,7 @@ class CdcAcceptanceTests {
     final JobInfoRead connectionSyncRead2 = apiClient.getConnectionApi()
         .syncConnection(new ConnectionIdRequestBody().connectionId(connectionId));
     waitForSuccessfulJob(apiClient.getJobsApi(), connectionSyncRead2.getJob());
-    LOGGER.info("state after sync 2: {}", apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
+    LOGGER.info("state after sync 2: {}", apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId)));
 
     assertDestinationMatches(ID_AND_NAME_TABLE, expectedIdAndNameRecords);
   }
@@ -559,7 +561,7 @@ class CdcAcceptanceTests {
   }
 
   private void assertGlobalStateContainsStreams(final UUID connectionId, final List<StreamDescriptor> expectedStreams) throws ApiException {
-    final ConnectionState state = apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId));
+    final ConnectionState state = apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId));
     LOGGER.info("state: {}", state);
     assertEquals(ConnectionStateType.GLOBAL, state.getStateType());
     final List<StreamDescriptor> stateStreams = state.getGlobalState().getStreamStates().stream().map(StreamState::getStreamDescriptor).toList();
@@ -569,7 +571,7 @@ class CdcAcceptanceTests {
   }
 
   private void assertNoState(final UUID connectionId) throws ApiException {
-    final ConnectionState state = apiClient.getConnectionApi().getState(new ConnectionIdRequestBody().connectionId(connectionId));
+    final ConnectionState state = apiClient.getStateApi().getState(new ConnectionIdRequestBody().connectionId(connectionId));
     assertEquals(ConnectionStateType.NOT_SET, state.getStateType());
     assertNull(state.getState());
     assertNull(state.getStreamState());
@@ -583,16 +585,17 @@ class CdcAcceptanceTests {
     Set<SchemaTableNamePair> pairs = testHarness.listAllTables(sourceDb);
     LOGGER.info("Printing source tables");
     for (final SchemaTableNamePair pair : pairs) {
-      final Result<Record> result = sourceDb.query(context -> context.fetch(String.format("SELECT * FROM %s.%s", pair.schemaName, pair.tableName)));
-      LOGGER.info("{}.{} contents:\n{}", pair.schemaName, pair.tableName, result);
+      final Result<Record> result = sourceDb.query(
+          context -> context.fetch(String.format("SELECT * FROM %s.%s", pair.schemaName(), pair.tableName())));
+      LOGGER.info("{}.{} contents:\n{}", pair.schemaName(), pair.tableName(), result);
     }
 
     final Database destDb = testHarness.getDestinationDatabase();
     pairs = testHarness.listAllTables(destDb);
     LOGGER.info("Printing destination tables");
     for (final SchemaTableNamePair pair : pairs) {
-      final Result<Record> result = destDb.query(context -> context.fetch(String.format("SELECT * FROM %s.%s", pair.schemaName, pair.tableName)));
-      LOGGER.info("{}.{} contents:\n{}", pair.schemaName, pair.tableName, result);
+      final Result<Record> result = destDb.query(context -> context.fetch(String.format("SELECT * FROM %s.%s", pair.schemaName(), pair.tableName())));
+      LOGGER.info("{}.{} contents:\n{}", pair.schemaName(), pair.tableName(), result);
     }
   }
 

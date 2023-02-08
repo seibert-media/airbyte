@@ -19,9 +19,12 @@ from requests.exceptions import ConnectionError
 from source_amazon_ads.schemas.profile import AccountInfo, Profile
 from source_amazon_ads.source import CONFIG_DATE_FORMAT
 from source_amazon_ads.streams import (
+    SponsoredBrandsCampaigns,
     SponsoredBrandsReportStream,
     SponsoredBrandsVideoReportStream,
+    SponsoredDisplayCampaigns,
     SponsoredDisplayReportStream,
+    SponsoredProductCampaigns,
     SponsoredProductsReportStream,
 )
 from source_amazon_ads.streams.report_streams.report_streams import ReportGenerationFailure, ReportGenerationInProgress, TooManyRequests
@@ -33,31 +36,62 @@ METRIC_RESPONSE is gzip compressed binary representing this string:
 [
   {
     "campaignId": 214078428,
-    "campaignName": "sample-campaign-name-214078428"
+    "campaignName": "sample-campaign-name-214078428",
+    "adGroupId": "6490134",
+    "adId": "665320125",
+    "targetId": "791320341",
+    "asin": "G000PSH142",
+    "keywordBid": "511234974",
+    "keywordId": "965783021"
   },
   {
     "campaignId": 44504582,
-    "campaignName": "sample-campaign-name-44504582"
+    "campaignName": "sample-campaign-name-44504582",
+    "adGroupId": "6490134",
+    "adId": "665320125",
+    "targetId": "791320341",
+    "asin": "G000PSH142",
+    "keywordBid": "511234974",
+    "keywordId": "965783021"
   },
   {
     "campaignId": 509144838,
-    "campaignName": "sample-campaign-name-509144838"
+    "campaignName": "sample-campaign-name-509144838",
+    "adGroupId": "6490134",
+    "adId": "665320125",
+    "targetId": "791320341",
+    "asin": "G000PSH142",
+    "keywordBid": "511234974",
+    "keywordId": "965783021"
   },
   {
     "campaignId": 231712082,
-    "campaignName": "sample-campaign-name-231712082"
+    "campaignName": "sample-campaign-name-231712082",
+    "adGroupId": "6490134",
+    "adId": "665320125",
+    "targetId": "791320341",
+    "asin": "G000PSH142",
+    "keywordBid": "511234974",
+    "keywordId": "965783021"
   },
   {
     "campaignId": 895306040,
-    "campaignName": "sample-campaign-name-895306040"
+    "campaignName": "sample-campaign-name-895306040",
+    "adGroupId": "6490134",
+    "adId": "665320125",
+    "targetId": "791320341",
+    "asin": "G000PSH142",
+    "keywordBid": "511234974",
+    "keywordId": "965783021"
   }
 ]
 """
 METRIC_RESPONSE = b64decode(
     """
-H4sIAAAAAAAAAIvmUlCoBmIFBaXkxNyCxMz0PM8UJSsFI0MTA3MLEyMLHVRJv8TcVKC0UjGQn5Oq
-CxPWzQOK68I1KQE11ergMNrExNTAxNTCiBSTYXrwGmxqYGloYmJhTJKb4ZrwGm1kbGhuaGRAmqPh
-mvAabWFpamxgZmBiQIrRcE1go7liAYX9dsTHAQAA
+H4sIANnqymMC/92SsYrCQBBA+3zFsrWBmdnZ7K6lTbSRgyvFYjFBwl2iJIqI+O+3p2aPEyxSmmKLnceb4jHJKhHiEp
+4QcuPrva+2zaKQU0HIYCyTnfyHS1+XAcsu/L/LtB+nTZinUZIPyxd5uzvubxtlxg5Q8R97jDOtCJB0Dw6+3ZaHOzQO
+A1SM0eqq5hfkAPDxOUemnnyV59OuLWbVTdSIpNgZfsL3tS7TxioglAFeJy8aMGtgbWlIgt4ZRwENDpmtGnQFURpHA1
+JokGDYGURpHA2s0woyYBjSIErv1SBZJz+HyV3zFgUAAA==
 """
 )
 METRICS_COUNT = 5
@@ -241,7 +275,7 @@ def test_display_report_stream_init_too_many_requests(mocker, config):
         ),
         (
             [
-                (lambda x: x > 5, None, "2021-01-02 04:04:05"),
+                (lambda x: x > 5, None, "2021-01-02 06:04:05"),
             ],
             ReportGenerationInProgress,
         ),
@@ -256,11 +290,11 @@ def test_display_report_stream_init_too_many_requests(mocker, config):
         (
             [
                 (lambda x: True, "FAILURE", None),
-                (lambda x: x >= 10, None, "2021-01-02 04:04:05"),
-                (lambda x: x >= 15, None, "2021-01-02 05:04:05"),
-                (lambda x: x >= 20, None, "2021-01-02 06:04:05"),
-                (lambda x: x >= 25, None, "2021-01-02 07:04:05"),
-                (lambda x: x >= 30, None, "2021-01-02 08:04:05"),
+                (lambda x: x >= 10, None, "2021-01-02 06:04:05"),
+                (lambda x: x >= 15, None, "2021-01-02 09:04:05"),
+                (lambda x: x >= 20, None, "2021-01-02 12:04:05"),
+                (lambda x: x >= 25, None, "2021-01-02 15:04:05"),
+                (lambda x: x >= 30, None, "2021-01-02 18:04:05"),
             ],
             ReportGenerationFailure,
         ),
@@ -556,3 +590,56 @@ def test_read_incremental_with_records_start_date(config):
         records = list(read_incremental(stream, state))
         assert state == {"1": {"reportDate": "20210104"}}
         assert {r["reportDate"] for r in records} == {"20210103", "20210104", "20210105", "20210106"}
+
+
+@pytest.mark.parametrize(
+    "state_filter, stream_class",
+    [
+        (
+            ["enabled", "archived", "paused"],
+            SponsoredBrandsCampaigns,
+        ),
+        (
+            ["enabled"],
+            SponsoredBrandsCampaigns,
+        ),
+        (
+            None,
+            SponsoredBrandsCampaigns,
+        ),
+        (
+            ["enabled", "archived", "paused"],
+            SponsoredProductCampaigns,
+        ),
+        (
+            ["enabled"],
+            SponsoredProductCampaigns,
+        ),
+        (
+            None,
+            SponsoredProductCampaigns,
+        ),
+        (
+            ["enabled", "archived", "paused"],
+            SponsoredDisplayCampaigns,
+        ),
+        (
+            ["enabled"],
+            SponsoredDisplayCampaigns,
+        ),
+        (
+            None,
+            SponsoredDisplayCampaigns,
+        ),
+    ],
+)
+def test_streams_state_filter(mocker, config, state_filter, stream_class):
+    profiles = make_profiles()
+    mocker.patch.object(stream_class, "state_filter", new_callable=mocker.PropertyMock, return_value=state_filter)
+
+    stream = stream_class(config, profiles)
+    params = stream.request_params(stream_state=None, stream_slice=None, next_page_token=None)
+    if "stateFilter" in params:
+        assert params["stateFilter"] == ",".join(state_filter)
+    else:
+        assert state_filter is None

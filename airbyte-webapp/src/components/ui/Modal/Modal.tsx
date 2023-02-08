@@ -2,8 +2,9 @@ import { Dialog } from "@headlessui/react";
 import classNames from "classnames";
 import React, { useState } from "react";
 
-import { Card } from "../../base/Card";
 import styles from "./Modal.module.scss";
+import { Card } from "../Card";
+import { Overlay } from "../Overlay";
 
 export interface ModalProps {
   title?: string | React.ReactNode;
@@ -11,6 +12,10 @@ export interface ModalProps {
   cardless?: boolean;
   size?: "sm" | "md" | "lg" | "xl";
   testId?: string;
+  /**
+   * If specified, the full content of the modal including header, body and footer is wrapped in this component (only a class name prop might be set on the component)
+   */
+  wrapIn?: React.FC<React.PropsWithChildren<{ className?: string }>>;
 }
 
 const cardStyleBySize = {
@@ -27,6 +32,7 @@ export const Modal: React.FC<React.PropsWithChildren<ModalProps>> = ({
   onClose,
   cardless,
   testId,
+  wrapIn,
 }) => {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -35,10 +41,12 @@ export const Modal: React.FC<React.PropsWithChildren<ModalProps>> = ({
     onClose?.();
   };
 
+  const Wrapper = wrapIn || "div";
+
   return (
     <Dialog open={isOpen} onClose={onModalClose} data-testid={testId} className={styles.modalPageContainer}>
-      <div className={styles.backdrop} />
-      <div className={styles.modalContainer}>
+      <Overlay />
+      <Wrapper className={styles.modalContainer}>
         <Dialog.Panel className={styles.modalPanel}>
           {cardless ? (
             children
@@ -48,7 +56,7 @@ export const Modal: React.FC<React.PropsWithChildren<ModalProps>> = ({
             </Card>
           )}
         </Dialog.Panel>
-      </div>
+      </Wrapper>
     </Dialog>
   );
 };

@@ -126,6 +126,19 @@ public class Job {
         .findFirst();
   }
 
+  public Optional<Attempt> getLastAttempt() {
+    return getAttempts()
+        .stream()
+        .max(Comparator.comparing(Attempt::getCreatedAtInSecond));
+  }
+
+  public Optional<Attempt> getAttemptByNumber(final int attemptNumber) {
+    return getAttempts()
+        .stream()
+        .filter(a -> a.getAttemptNumber() == attemptNumber)
+        .findFirst();
+  }
+
   public boolean hasRunningAttempt() {
     return getAttempts().stream().anyMatch(a -> !Attempt.isAttemptInTerminalState(a));
   }
